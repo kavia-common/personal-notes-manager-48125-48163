@@ -16,7 +16,9 @@ export class NotesStore {
       sort: 'updatedAt_desc',
     };
     this.debouncedPersist = debounce(() => {
-      // Trigger save of selected note if any updated
+      // Trigger save of selected note if any updated.
+      // apiClient.updateNote internally falls back to localStorage when no backend
+      // is configured or when the network request fails.
       const note = this.getSelected();
       if (note) {
         apiClient.updateNote(note.id, note).catch(() => {});
@@ -40,11 +42,25 @@ export class NotesStore {
 
   async init() {
     this.set({ loading: true });
-    const notes = await apiClient.listNotes();
-    // Sort newest first
-    notes.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    const selectedId = notes[0]?.id || null;
-    this.set({ notes, selectedId, loading: false });
+    try {
+      const notes = await apiClient.listNotes();
+      // Sort newest first
+      notes.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      const selectedId = notes[0]?.id || null;
+      this.set({ notes, selectedId, loading: false });
+    } catch (e) {
+      // As an extra guard (though apiClient already falls back),
+      // ensure we never leave the app in an error state.
+      try {
+        const notes = await apiClient.listNotes(); // this will fallback internally to localStorage
+        notes.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        const selectedId = notes[0]?.id || null;
+        this.set({ notes, selectedId, loading: false });
+      } catch {
+        // Absolute fallback: empty state
+        this.set({ notes: [], selectedId: null, loading: false });
+      }
+    }
   }
 
   getSelected() {
