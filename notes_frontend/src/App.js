@@ -1,47 +1,82 @@
-import React, { useState, useEffect } from 'react';
-import logo from './logo.svg';
-import './App.css';
+import React, { useEffect, useState } from 'react';
+import './styles.css';
+import { Header } from './components/Header';
+import { Sidebar } from './components/Sidebar';
+import { NoteEditor } from './components/NoteEditor';
+import { EmptyState } from './components/EmptyState';
+import { Modal } from './components/Modal';
+import { notesStore } from './state/notesStore';
 
 // PUBLIC_INTERFACE
 function App() {
-  const [theme, setTheme] = useState('light');
+  /** This is the SPA entry with header, sidebar, and editor layout. */
+  const [state, setState] = useState(notesStore.state);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  // Effect to apply theme to document element
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
+    const unsub = notesStore.subscribe(setState);
+    notesStore.init();
+    return unsub;
+  }, []);
 
-  // PUBLIC_INTERFACE
-  const toggleTheme = () => {
-    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+  const selected = notesStore.getSelected();
+
+  const handleCreate = () => notesStore.create();
+  const handleDelete = () => {
+    if (!selected) return;
+    setShowConfirm(true);
+  };
+  const confirmDelete = () => {
+    if (selected) notesStore.remove(selected.id);
+    setShowConfirm(false);
   };
 
   return (
-    <div className="App">
-      <header className="App-header">
-        <button 
-          className="theme-toggle" 
-          onClick={toggleTheme}
-          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-        >
-          {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
-        </button>
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <p>
-          Current theme: <strong>{theme}</strong>
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div className="app-shell">
+      <Header
+        onCreate={handleCreate}
+        onDelete={handleDelete}
+        canDelete={!!selected}
+      />
+      <div className="layout">
+        <Sidebar
+          query={state.query}
+          onQueryChange={q => notesStore.setQuery(q)}
+          notes={notesStore.filtered()}
+          selectedId={state.selectedId}
+          onSelect={id => notesStore.select(id)}
+        />
+        <main className="main" aria-label="Main content">
+          <div className="editor-header">
+            <div style={{ fontWeight: 600 }}>
+              {selected ? (selected.title || 'Untitled') : 'Welcome'}
+            </div>
+            <div className="helper">
+              {selected ? 'Editing note' : 'Create a note to get started'}
+            </div>
+          </div>
+          {selected ? (
+            <NoteEditor
+              note={selected}
+              onChangeTitle={(v) => notesStore.updateSelected({ title: v })}
+              onChangeContent={(v) => notesStore.updateSelected({ content: v })}
+            />
+          ) : (
+            <EmptyState />
+          )}
+        </main>
+      </div>
+
+      {showConfirm && (
+        <Modal
+          title="Delete note?"
+          description="This action cannot be undone."
+          confirmText="Delete"
+          confirmVariant="danger"
+          onCancel={() => setShowConfirm(false)}
+          onConfirm={confirmDelete}
+        />
+      )}
     </div>
   );
 }
